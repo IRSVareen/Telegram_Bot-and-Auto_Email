@@ -4,17 +4,10 @@ const path = require('path')
 const fs = require('fs')
 require('dotenv').config()
 const jsonData = require('../data')
+const Company = require('../models/companyModel')
 
 
 
-const getTodayFileName = () => {
-  const date = new Date();
-  const today = String(date.getDate()).padStart(2, "0");
-  const yesterday = String(date.getDate() - 1).padStart(2, "0");
-  const month = date.toLocaleString("en-US", { month: "short" });
-  console.log(`${yesterday}_${today}_${month}`)
-  return `Alliance_Report_${yesterday}_${today}_${month}.pdf`;
-};
 
 
 function generateTable(jsonData) {
@@ -55,16 +48,21 @@ const sendEmail_HTML = async () => {
       },
     });
 
-    const fileName = getTodayFileName()
-    const filePath = path.join(__dirname, '..', '/allPDF', fileName)
 
-    if (!fs.existsSync(filePath)) {
-      console.error(`Error: File "${fileName}" not found.`);
+    const companies = await Company.find()
+
+    if(companies.length === 0){
+      console.log('No Companies exists in the database.');
       return;
     }
 
+    for(let company of companies){
+      const {companyName, email} = company
 
-    const tableData = generateTable(jsonData)
+      if(!companyName || !email){
+        console.log('Missing companyName or email',company);
+      }
+      const tableData = generateTable(jsonData)
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -78,7 +76,7 @@ const sendEmail_HTML = async () => {
     </head>
 
     <body>
-      <h2>Alliance Report (19/2/25 - 20/2/25)</h2>
+      <h2>${companyName} (19/2/25 - 20/2/25)</h2>
       ${tableData}
     </body>
     </html>`
@@ -87,12 +85,15 @@ const sendEmail_HTML = async () => {
 
     let info = await transporter.sendMail({
       from: '"Vareen Patel" <patelvareen23@gmail.com>',
-      to: "patelvareen23@gmail.com",
-      subject: "Alliance Report",
+      to: email,
+      subject: `Report for ${companyName}`,
       html: htmlContent
     });
 
     console.log("Message sent: %s", info.messageId);
+    }
+
+    
   } catch (error) {
     console.error("Error sending email:", error);
   }
@@ -102,54 +103,77 @@ const sendEmail_HTML = async () => {
 
 // Sending Pdf in email
 
-// const sendEmail = async (req, res) => {
-//   try {
-//     const transporter = nodemailer.createTransport({
-//       host: "smtp.gmail.com",
-//       port: 465,
-//       secure: true, 
-//       auth: {
-//         user: "patelvareen23@gmail.com", 
-//         pass: process.env.EMAIL_PASSWORD 
-//       },
-//     });
+const sendEmail = async () => {
+  try {
 
-//     const fileName = getTodayFileName()
-//     const filePath = path.join(__dirname, '..','/allPDF',fileName)
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true, 
+      auth: {
+        user: "patelvareen23@gmail.com", 
+        pass: process.env.EMAIL_PASSWORD 
+      },
+    });
 
-//     if(!fs.existsSync(filePath)){
-//       console.error(`Error: File "${fileName}" not found.`);
-//       return;
-//     }
 
-//     let info = await transporter.sendMail({
-//       from: '"Vareen Patel" <patelvareen23@gmail.com>', 
-//       to: "patelvareen23@gmail.com", 
-//       subject: "Alliance Report", 
-//       text: "This is the Auto-Generated Report",
-//       attachments: [
-//         {
-//           path: filePath,
-//           filename: fileName,
-//           contentType: "application/pdf",
-//         },
-//       ],
-//     });
+    const companies = await Company.find()
 
-//     console.log("Message sent: %s", info.messageId);
-//   } catch (error) {
-//     console.error("Error sending email:", error);
-//   }
-// };
+    if(companies.length === 0){
+      console.log('No Companies exists in the database.');
+      return;
+    }
+
+    for(let company of companies){
+
+      const {companyName, email} = company
+
+      const getTodayFileName = () => {
+        const date = new Date();
+        const today = String(date.getDate()).padStart(2, "0");
+        const yesterday = String(date.getDate() - 1).padStart(2, "0");
+        const month = date.toLocaleString("en-US", { month: "short" });
+        console.log(`${yesterday}_${today}_${month}`)
+        return `${companyName}_Report_${yesterday}_${today}_${month}.pdf`;
+      };
+  
+      const fileName = getTodayFileName()
+      const filePath = path.join(__dirname, '..','/allPDF',fileName)
+  
+      if(!fs.existsSync(filePath)){
+        console.error(`Error: File "${fileName}" not found.`);
+        return;
+      }
+  
+      let info = await transporter.sendMail({
+        from: '"Vareen Patel" <patelvareen23@gmail.com>', 
+        to: email, 
+        subject: `${companyName} Report`, 
+        text: "This is the Auto-Generated Report ",
+        attachments: [
+          {
+            path: filePath,
+            filename: fileName,
+            contentType: "application/pdf",
+          },
+        ],
+      });
+
+    console.log("Message sent: %s", info.messageId);
+    }
+  } catch (error) {
+    console.error("Error sending email:", error);
+  }
+};
 
 
 
 const sendDaily = async () => {
   console.log('sending');
-  schedule.scheduleJob("10 44 15 * * *", () => {
+  schedule.scheduleJob("48 10 * * *", () => {
     console.log('mail scheduled at Time');
-    // sendEmail()
-    sendEmail_HTML()
+    sendEmail()
+    // sendEmail_HTML()
   })
 }
 
